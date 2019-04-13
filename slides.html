@@ -170,9 +170,8 @@ parseWords str = case parseOnly parseWords str of
   Left _  -&gt; error &quot;Parser error&quot;
   Right c -&gt; c</code></pre>
 </section>
-<section id="parsewords" class="level1">
-<h1><code>parseWords</code></h1>
-<p>Need a function to consume <code>ByteString</code> and return an array of words.</p>
+<section id="parseword" class="level1">
+<h1><code>parseWord</code></h1>
 <pre class="haskell"><code>takeWhile :: (Word8 -&gt; Bool) -&gt; Parser ByteString 
 
 -- Input: toBS &quot;abc 123 monad&quot;

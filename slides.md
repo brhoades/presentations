@@ -137,9 +137,7 @@ parseWords str = case parseOnly parseWords str of
   Right c -> c
 ```
 
-# `parseWords`
-Need a function to consume `ByteString` and return an array of words.
-
+# `parseWord`
 ```haskell
 takeWhile :: (Word8 -> Bool) -> Parser ByteString 
 
