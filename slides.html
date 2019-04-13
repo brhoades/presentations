@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Parser Combinators</title>
+    <meta name="description" content="Parser Combinators">    
+        <meta name="author" content="Billy Rhoades" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="css/reveal.css">
+        <link rel="stylesheet" href="css/theme/black.css" id="theme">
+    
+    <link rel="stylesheet" href="overrides.css">
+    <!-- For syntax highlighting -->
+        <link rel="stylesheet" href="lib/css/zenburn.css">
+    
+    <!-- If the query includes 'print-pdf', use the PDF print sheet -->
+    <script>
+      document.write( '<link rel="stylesheet" href="css/print/' +
+        ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + 
+        '.css" type="text/css" media="print">' );
+    </script>
+
+    <!--[if lt IE 9]>
+      <script src="lib/js/html5shiv.js"></script>
+    <![endif]-->
+      </head>
+
+  <body>
+    
+    <div class="reveal">
+      <!-- Any section element inside of this container is displayed as a slide -->
+      <div class="slides">
+        <section>
+          <h1>Parser Combinators</h1>
+          <h3>Billy Rhoades</h3>
+          <p>
+          <h4>April 13, 2019</h4>
+          </p>
+        </section>  
+
+        
+<section id="objectives" class="level1">
+<h1>Objectives</h1>
+<ul>
+<li>Discuss paser combinator modules available</li>
+<li><p>Cover parser combinator usage in <a href="https://github.com/brhoades/marko-hs">brhoades/marko-hs</a></p>
+<ul>
+<li>Basic sentence parsing (<a href="http://blog.brod.es/markov/chain/marko/ruby/bot/irc/2018/07/06/my-first-markov-chain-bot.html">Markov Chains blog</a>)</li>
+<li>IRC Parsing (subset of <a href="https://tools.ietf.org/html/rfc2812">RFC 2812</a>)</li>
+</ul></li>
+</ul>
+</section>
+<section id="parser-combinator-modules" class="level1">
+<h1>Parser combinator modules</h1>
+<ul>
+<li><a href="https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html">base</a> (marko-hs IRC parser)
+<ul>
+<li>Built-in with widely-available examples but slow.</li>
+</ul></li>
+<li><a href="https://github.com/mrkkrp/parser-combinators">parser-combinators</a>
+<ul>
+<li>Lightweight parser combinators, only depends on base</li>
+</ul></li>
+<li><a href="https://github.com/haskell/parsec">parsec</a> / <a href="https://github.com/mrkkrp/megaparsec">Megaparsec</a>
+<ul>
+<li>Industrial-strength, monad-fed, feature-rich parsers</li>
+<li><code>Data.Text</code>-based with unicode goodness</li>
+</ul></li>
+<li><a href="https://github.com/bos/attoparsec">attoparsec</a> (marko-hs sentence parser)
+<ul>
+<li>Parsec(ish) but with <code>ByteStrings</code></li>
+<li>Fast, memory-efficient, but no unicode</li>
+<li>Good for parsing vast quantities of data (GBs of IRC text!)</li>
+</ul></li>
+</ul>
+</section>
+<section id="attoparsec" class="level1">
+<h1>Attoparsec</h1>
+<p>Core types</p>
+<pre class="haskell"><code>type Parser = Parser ByteString
+type Result = IResult ByteString
+data IResult i r =
+    Fail i [String] String     -- parse failed
+  | Partial (i -&gt; IResult i r) -- continue feeding input
+  | Done i r                   -- complete</code></pre>
+<p>Starting functions</p>
+<pre class="haskell"><code>-- If you want to feed more data in chunks
+parse :: Parser a -&gt; ByteString -&gt; Result a
+
+-- Take one string, return result or error
+parseOnly :: Parser a -&gt; ByteString -&gt; Either String a</code></pre>
+</section>
+<section id="dealing-with-bytestrings" class="level1">
+<h1>Dealing with ByteStrings</h1>
+<ul>
+<li><code>Word8</code>s are unsigned 8-bit integers</li>
+<li><code>ByteStrings</code> are <code>Word8</code> arrays in a whole grain compiler wrap</li>
+</ul>
+<pre class="haskell"><code>data {-# CTYPE &quot;HsWord8&quot; #-} Word8 = W8# Word# -- :s
+data ByteString = \
+  PS {-# UNPACK #-} !(ForeignPtr Word8) -- payload
+     {-# UNPACK #-} !Int                -- offset
+     {-# UNPACK #-} !Int                -- length
+  deriving (Typeable)
+
+pack :: [Word8] -&gt; ByteString
+unpack :: ByteString -&gt; [Word8]</code></pre>
+</section>
+<section id="data.char-to-data.bytestring" class="level1">
+<h1>[Data.Char] to Data.ByteString</h1>
+<pre class="haskell"><code>-- Getting to/from Word8 is most easily done
+-- by massaging a Char into something with Num
+
+toW :: (Num c, Enum a) =&gt; a -&gt; c
+toW = fromIntegral . fromEnum</code></pre>
+<pre><code>&gt; :t pack [toW &#39;w&#39;]
+pack [toW &#39;w&#39;] :: ByteString
+
+toBS str = pack $ map toW str
+
+&gt; :t toBS &quot;Hello!&quot;
+toBS &quot;Hello!&quot; :: ByteString
+</code></pre>
+</section>
+<section id="lets-parse-a-sentence" class="level1">
+<h1>Let’s parse a sentence</h1>
+<ul>
+<li>Words are separated by spaces</li>
+<li>Punctuation terminates sentences / clauses</li>
+<li>End of input to terminate sentences abruptly</li>
+</ul>
+<pre class="haskell"><code>-- Source: A dog jumps over the log! The log was very long.
+-- We want:
+[&quot;A&quot;, &quot;dog&quot;, &quot;jumps&quot;, &quot;over&quot;, &quot;the&quot;, &quot;log&quot;, &quot;!&quot;,
+ &quot;The&quot;, &quot;log&quot;, &quot;was&quot;, &quot;very&quot;, &quot;long&quot;, &quot;.&quot;]
+
+-- So:
+parseWords :: Data.ByteString -&gt; [Data.ByteString]
+
+-- Which&#39;ll be easier if we find out how to parse a single word first
+parseWord :: Data.ByteString -&gt; [Data.ByteString]</code></pre>
+</section>
+<section id="attoparsec-predicates" class="level1">
+<h1>Attoparsec predicates</h1>
+<p>Attoparsec takes <code>Word8 -&gt; Bool</code> functions to do matching work. We’ll need those to determine when we hit a “separator” or “punctuation”.</p>
+<pre class="haskell"><code>splitter       = (== toW &#39; &#39;)
+endline        = \x -&gt; x == (toW &#39;\n&#39;) || x == (toW &#39;\r&#39;)
+punct          = \x -&gt; x == (toW &#39;.&#39;)
+                      || x == (toW &#39;!&#39;) 
+                      || x == (toW &#39;?&#39;)
+wordTerminator = \x -&gt; (splitter x || endline x || punct x)</code></pre>
+<p>Attoparsec provides utility functions to do this, but they’re slow. Documentation explicitly advises against their use.</p>
+<pre class="haskell"><code>inClass    :: String -&gt; Word8 -&gt; Bool
+notInClass :: String -&gt; Word8 -&gt; Bool 
+vowel             = inClass &quot;aeiou&quot;
+probablyConsonant = notInClass &quot;aeiou&quot;</code></pre>
+</section>
+<section id="parser-monad" class="level1">
+<h1><code>Parser</code> Monad</h1>
+<p><code>Parser</code> wraps your parsing functions. It carries parsed input and unused input forward as you consume it.</p>
+<pre class="haskell"><code>parseWords :: P.Parser [D.ByteString]
+parseWords = undefined  -- soon!
+
+parseOnly :: Parser a -&gt; ByteString -&gt; Either String a
+
+-- We will implement parseWord
+words :: D.ByteString -&gt; [D.ByteString]
+words string = case parseOnly parseWords string of
+  Left _  -&gt; error &quot;Parser error&quot;
+  Right c -&gt; c</code></pre>
+</section>
+<section id="parsewords" class="level1">
+<h1><code>parseWords</code></h1>
+<p>We need to write a function which will consume some <code>ByteString</code> and return an array of words that were separated by separator.</p>
+<pre class="haskell"><code>-- Input: toBS &quot;abc 123 monad&quot;
+-- Output: [&quot;abc&quot;, &quot;123&quot;, &quot;monad&quot;]
+
+takeWhile :: (Word8 -&gt; Bool) -&gt; Parser ByteString 
+
+-- Start with parsing individual words
+-- Words are terminated with spaces or punctuation.
+parseWord :: Parser Data.ByteString
+parseWord = do
+  res &lt;- takeWhile1 (not . wordTerminator)
+  return res</code></pre>
+<ul>
+<li>wordTerminator is our <code>Word8</code> matcher (predicate) for punctuation, spaces, or newlines</li>
+<li><code>takeWhile1</code> requires a match and consumes input while the predicate is satisfied
+<ul>
+<li><code>takeWhile</code> allows no match</li>
+</ul></li>
+</ul>
+</section>
+<section id="using-parseword" class="level1">
+<h1>Using <code>parseWord</code></h1>
+<pre class="haskell"><code>parseWord :: Parser Data.ByteString
+parseWord = do
+  res &lt;- takeWhile1 (not . wordTerminator)
+  return res
+
+&gt; parseOnly parseWord (toBS &quot;Hello there!&quot;)
+Right &quot;Hello&quot;</code></pre>
+<p>Wow, <em>way cool</em></p>
+</section>
+<section id="edge-cases" class="level1">
+<h1>Edge Cases</h1>
+<p>There’s some nasty edge cases if you begin your words with a splitter.</p>
+<pre class="haskell"><code>&gt; parseOnly parseWord (toBS &quot;   Hello there!&quot;)
+Left &quot;Failed reading: takeWhile1&quot;</code></pre>
+<p>We don’t want these separators in our words anyway, so let’s skip them.</p>
+<pre class="haskell"><code>skipWhile :: (Word8 -&gt; Bool) -&gt; Parser () 
+parseWord = do
+  P.skipWhile splitter -- (== toW &#39; &#39;)
+  res &lt;- takeWhile1 (not . wordTerminator)
+  P.skipWhile splitter -- another edge case, dw about it
+  return res
+
+&gt; parseOnly parseWord (toBS &quot;   Hello there!&quot;)
+Right &quot;Hello&quot; -- 😂</code></pre>
+<p><code>skipWhile</code> is a <code>takeWhile</code> that discards. Not <code>skipWhile1</code> because if there are no spaces, that’s fine.</p>
+</section>
+<section id="now-for-sentences" class="level1">
+<h1>Now for Sentences</h1>
+<p>We need to parse words over and over. We have the inner bit done but how do we chain them?</p>
+<pre class="haskell"><code>manyTill :: Alternative f =&gt; f a -&gt; f b -&gt; f [a] 
+satisfy :: (Word8 -&gt; Bool) -&gt; Parser Word8 
+
+parseWords :: Data.ByteString -&gt; [Data.ByteString]
+parseWords = do
+  skipWhile (\x -&gt; endline x || splitter x)
+  manyTill parseWord (satisfy endline)</code></pre>
+<ul>
+<li>We continue to skip any endlines or splitters that may come in between words.</li>
+<li>manyTill calls one parser until the other consumes input</li>
+</ul>
+</section>
+<section id="does-it-work" class="level1">
+<h1>Does it work?</h1>
+<p>Yes!</p>
+<pre class="haskell"><code>&gt; parseOnly parseWords (toBS &quot;Hello there\n&quot;)
+Right [&quot;Hello&quot;,&quot;there&quot;]</code></pre>
+<p>But not for punctuation</p>
+<pre class="haskell"><code>&gt; parseOnly parseWords (toBS &quot;Hello there!\n&quot;)
+Left &quot;Failed reading: takeWhile1&quot;</code></pre>
+</section>
+<section id="why-does-it-fail" class="level1">
+<h1>Why does it fail?</h1>
+<pre class="haskell"><code>-- inside parseWord:
+takeWhile1 (not . wordTerminator)
+
+-- Input remaining: &quot;Hello there!&quot;
+-- First call: &quot;Hello&quot;
+
+-- Input remaining: &quot;there!&quot;
+-- Second call: &quot;There&quot;
+
+-- Input remaining: &quot;!&quot;
+-- Third call: &quot;&quot;
+-- Error: takeWhile1 requires at least one Word8 match</code></pre>
+</section>
+<section id="beef-it-up" class="level1">
+<h1>Beef it up</h1>
+<p>Punctuation is an important part of a sentence. We should consume it and return it if it’s there.</p>
+<pre class="haskell"><code>-- We need to call this if there&#39;s punctuation
+-- but takeWhile1 requires 1 punctuation
+P.takeWhile1 punct
+  -- \x -&gt; x == (toW &#39;.&#39;) || x == (toW &#39;!&#39;) || x == (toW &#39;?&#39;)</code></pre>
+</section>
+<section id="enter-choice" class="level1">
+<h1>Enter: choice</h1>
+<pre class="haskell"><code>choice :: Alternative f =&gt; [f a] -&gt; f a 
+
+parseWord :: Parser (ByteString)
+parseWord = do
+  skipWhile splitter
+  res &lt;- choice [takeWhile1 (not . wordTerminator),
+                 takeWhile1 punct]
+  skipWhile splitter
+  return res</code></pre>
+<p>Now we can parse a word that’s only punctuation.</p>
+</section>
+<section id="with-choice" class="level1">
+<h1>With choice</h1>
+<pre class="haskell"><code>&gt; parseOnly parseWords (toBS &quot;Hello there!\n&quot;)
+Right [&quot;Hello&quot;,&quot;there&quot;,&quot;!&quot;]
+
+&gt; parseOnly parseWords (
+    toBS &quot;Hello there! How are you doing?\n&quot;
+  )
+Right [&quot;Hello&quot;,&quot;there&quot;,&quot;!&quot;,&quot;How&quot;,&quot;are&quot;,&quot;you&quot;,&quot;doing&quot;,&quot;?&quot;]</code></pre>
+<p>Perfect, it’s all separated now. This is (mostly) how marko-hs uses attoparsec to parse sentences into words.</p>
+</section>
+<section id="summary-of-attoparsec-and-marko-hs" class="level1">
+<h1>Summary of attoparsec and marko-hs</h1>
+<ul>
+<li>Marko used attoparsec over other libraries because:
+<ul>
+<li><code>ByteString</code>s are very memory efficient</li>
+<li>Parsing into <code>ByteString</code>s is faster than parsing into <code>Data.Text</code></li>
+<li>Parsing 500k IRC lines into chains takes seconds</li>
+<li>Storing 500k chains is done &lt;512 MiB memory
+<ul>
+<li>6 million 2-pairs of chains, stored uncompressed, takes mere GBs</li>
+</ul></li>
+</ul></li>
+<li>I hated attoparsec because:
+<ul>
+<li>Less feature rich / widely used than megaparsec or ReadP</li>
+<li>Using <code>ByteString</code>s activated my C PTSD</li>
+</ul></li>
+</ul>
+</section>
+<section id="how-about-that-irc" class="level1">
+<h1>How about that IRC?</h1>
+<p>Here’s the bare essentials of IRC our bot needs:</p>
+<ul>
+<li>PING: allows us to stay connected. When you get a PING you PONG.</li>
+<li>MODE: this is an easy way to tell when we can join our channels.</li>
+<li>PRIVMSG: all messages from users come over PRIVMSG. This is how we’ll respond to people.</li>
+</ul>
+<p>Examples of each (&gt; in, &lt; out):</p>
+<pre><code>&gt; PING irc.freenode.net
+&gt; :irc.freenode.net MODE &lt;umask&gt; +b
+&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+</section>
+<section id="readp-same-great-taste-bytestring-free" class="level1">
+<h1><code>ReadP</code>: Same great taste, ByteString-free</h1>
+<p>IRC parsing was done with base <code>Text.ParserCombinators.ReadP</code></p>
+<ul>
+<li><code>Network.Simple.TCP.TLS</code> likes <code>Data.Text</code></li>
+<li>IRC parsing doesn’t need to perform like sentence parsing</li>
+<li>I did this first; lots of guides out there for how to use ReadP</li>
+</ul>
+<p>Major differences</p>
+<ul>
+<li><code>ReadP</code> is like the <code>Parser</code> Monad</li>
+<li>No stupid <code>toW</code>/<code>toBS</code></li>
+<li><code>takeWhile</code> becomes <code>munch</code></li>
+<li><code>readP_to_S</code> is like <code>parseOnly</code>, sans <code>Result</code></li>
+</ul>
+</section>
+<section id="distinctions" class="level1">
+<h1>Distinctions</h1>
+<pre><code>&gt; PING irc.freenode.net
+&gt; :irc.freenode.net MODE &lt;umask&gt; +b
+&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<p>There’s clearly two formats here: PING and not PING. This looks like <code>choice</code>.</p>
+<pre class="haskell"><code>ircParser :: ReadP Event -- ReadP = Parser
+ircParser = choice [otherMessages, ping]</code></pre>
+<p>Bam, that was easy.</p>
+</section>
+<section id="ping" class="level1">
+<h1>PING</h1>
+<p>Ping is easy too.</p>
+<pre><code>&gt; PING irc.freenode.net</code></pre>
+<p>Let’s start by defining some predicates:</p>
+<pre class="haskell"><code>eol   :: Char -&gt; Bool
+eol   =  \x -&gt; (x == &#39;\n&#39; || x == &#39;\r&#39;)
+eolws :: Char -&gt; Bool
+eolws =  \x -&gt; (x == &#39;\n&#39; || x == &#39;\r&#39; || x == &#39; &#39;)</code></pre>
+<p>Some utility functions too. These just gobble arbitrary input.</p>
+<pre class="haskell"><code>_char :: Char -&gt; ReadP ()
+_char x = char x &gt;&gt; return ()
+_string :: String -&gt; ReadP ()
+_string x = string x &gt;&gt; return ()</code></pre>
+</section>
+<section id="parsing-ping" class="level1">
+<h1>Parsing PING</h1>
+<p>Ping has two parts:</p>
+<ul>
+<li>PING</li>
+<li>Everything after PING (which the server wants back)</li>
+</ul>
+<p>So we have two things to parse:</p>
+<pre class="haskell"><code>ping :: ReadP (Maybe Event)
+ping = do
+  -- get rid of leftover whitespace
+  skipMany $ satisfy eolws 
+  -- 1) Discard PING.
+  _string &quot;PING &quot;
+  -- 2) Grab everything else (server name)
+  -- munch (not . eolws)
+  server &lt;- consumeEOLWS 
+  -- Marko returns a Ping Event.
+  Just $ Ping server </code></pre>
+</section>
+<section id="parsing-everything-else" class="level1">
+<h1>Parsing <em>everything else</em></h1>
+<pre class="haskell"><code>ircParser :: ReadP (Maybe Event)
+ircParser = choice [otherMessages, ping]</code></pre>
+<p>otherMessages starts off like PING. Get the event type and parse each event differently.</p>
+<pre class="haskell"><code>otherMessages :: ReadP (Maybe Event)
+otherMessages = do
+  skipMany $ satisfy eolws
+  -- &#39;:&#39; is on these; if this fails, choice runs &quot;ping&quot;
+  _char &#39;:&#39;
+  server &lt;- munch1 (not . eolws) -- munch1 is takeWhile1
+  _char &#39; &#39;
+  eventType &lt;- munch1 (/= &#39; &#39;)
+  _char &#39; &#39;
+  getEvent server eventType</code></pre>
+</section>
+<section id="getevent" class="level1">
+<h1>getEvent</h1>
+<pre><code>&gt; :irc.freenode.net MODE &lt;umask&gt; +b
+&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<pre class="haskell"><code>getEvent :: String -&gt; eventType -&gt; ReadP (Maybe Event)
+getEvent server x
+    | x == &quot;PRIVMSG&quot; = handleMSG server
+    | x == &quot;MODE&quot;    = do
+        -- Very easy. Get a umask, get the mode.
+        umask &lt;- munch1 (not . eolws)
+        let user = parseUser umask
+        _char &#39; &#39;
+        mode &lt;- munch1 (not . eolws)
+        return $ Just $ ModeEvent user mode
+    | otherwise       = do
+        -- Unsupported IRC event
+        _ &lt;- consumeEOL
+        return Nothing</code></pre>
+</section>
+<section id="finally-handlemsg" class="level1">
+<h1>Finally: <code>handleMSG</code></h1>
+<pre><code>&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<pre class="haskell"><code>handleMSG :: String -&gt; ReadP (Maybe Event)
+handleMSG user = do
+  -- handles parsing umasks; boring
+  let nick = parseUser user
+  channel &lt;- munch1 (/= &#39; &#39;)
+  _string &quot; :&quot;
+  msg &lt;- consumeEOL
+  return $ Just $ MessageEvent (&quot;&quot;, channel, Just $ nick) msg</code></pre>
+</section>
+<section id="thats-it" class="level1">
+<h1>That’s it</h1>
+<p>That’s all the IRC parsing that you need to get into a server. It’s incredibly simple. Just hook it up to your HTTP socket:</p>
+<pre class="haskell"><code>parseIncoming :: String -&gt; Maybe Event
+parseIncoming str = do
+  -- readP_to_S is parseOnly that includes all the intermediate steps.
+  -- unreducedEvents :: [(Event, String)]
+  let unreducedEvents = readP_to_S ircParser str 
+
+  if length unreducedEvents &gt; 0 then
+    -- We just want the last result&#39;s event
+    Just $ fst . last $ unreducedEvents
+  else
+    Nothing</code></pre>
+</section>
+<section id="awesome-resouces" class="level1">
+<h1>Awesome Resouces</h1>
+<p>Want more parsing?</p>
+<ul>
+<li>Examples
+<ul>
+<li>METAR weather data with <code>ReadP</code> (<a href="https://two-wrongs.com/parser-combinators-parsing-for-haskell-beginners.html">blog</a>)</li>
+<li>Simple imperative language parsing (<a href="https://wiki.haskell.org/Parsing_a_simple_imperative_language">wiki</a>)</li>
+</ul></li>
+<li>Other resources
+<ul>
+<li>Markov chains for nuts like me (<a href="http://blog.brod.es/markov/chain/marko/ruby/bot/irc/2018/07/06/my-first-markov-chain-bot.html">blog.brod.es</a>)</li>
+<li>Deep comparison of parser combinator packages (<a href="https://github.com/mrkkrp/megaparsec#comparison-with-other-solutions">megaparsec GitHub</a>)</li>
+</ul></li>
+</ul>
+</section>
+      </div>
+
+      <script src="http://cdnjs.cloudflare.com/ajax/libs/headjs/1.0.3/head.js"></script>
+      <script src="js/reveal.js"></script>
+
+      <script>
+        // Full list of configuration options available here:
+        // https://github.com/hakimel/reveal.js#configuration
+        Reveal.initialize({
+          controls: true,
+          progress: true,
+          history: true,
+          center: false,
+          // available themes are in /css/theme
+                    theme: Reveal.getQueryHash().theme || 'black', 
+                    // default/cube/page/concave/zoom/linear/fade/none
+                    transition: Reveal.getQueryHash().transition || 'linear',
+                    // Optional libraries used to extend on reveal.js
+          dependencies: [
+            { src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+            { src: 'plugin/markdown/showdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+            { src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+            { src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+            { src: 'plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+            { src: 'plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+            // { src: 'plugin/remotes/remotes.js', async: true, condition: function() { return !!document.body.classList; } }
+          ]
+        });
+      </script>
+  </body>
+</html>
