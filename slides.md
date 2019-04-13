@@ -97,7 +97,7 @@ toBS "Hello!" :: ByteString
 parseWords :: ByteString -> [ByteString]
 
 -- Which'll be easier if we find out how to parse a single word first
-parseWord :: ByteString -> [ByteString]
+parseWord :: Parser ByteString
 ```
 
 # Attoparsec predicates
