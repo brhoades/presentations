@@ -108,8 +108,8 @@ data ByteString = \
 pack :: [Word8] -&gt; ByteString
 unpack :: ByteString -&gt; [Word8]</code></pre>
 </section>
-<section id="data.char-to-data.bytestring" class="level1">
-<h1>[Data.Char] to Data.ByteString</h1>
+<section id="char-to-bytestring" class="level1">
+<h1>[Char] to ByteString</h1>
 <pre class="haskell"><code>-- Getting to/from Word8 is most easily done
 -- by massaging a Char into something with Num
 
@@ -137,10 +137,10 @@ toBS &quot;Hello!&quot; :: ByteString
  &quot;The&quot;, &quot;log&quot;, &quot;was&quot;, &quot;very&quot;, &quot;long&quot;, &quot;.&quot;]
 
 -- So:
-parseWords :: Data.ByteString -&gt; [Data.ByteString]
+parseWords :: ByteString -&gt; [ByteString]
 
 -- Which&#39;ll be easier if we find out how to parse a single word first
-parseWord :: Data.ByteString -&gt; [Data.ByteString]</code></pre>
+parseWord :: ByteString -&gt; [ByteString]</code></pre>
 </section>
 <section id="attoparsec-predicates" class="level1">
 <h1>Attoparsec predicates</h1>
@@ -160,13 +160,13 @@ probablyConsonant = notInClass &quot;aeiou&quot;</code></pre>
 <section id="parser-monad" class="level1">
 <h1><code>Parser</code> Monad</h1>
 <p><code>Parser</code> wraps your parsing functions. It carries parsed input and unused input forward as you consume it.</p>
-<pre class="haskell"><code>parseWords :: P.Parser [D.ByteString]
+<pre class="haskell"><code>parseWords :: Parser [ByteString]
 parseWords = undefined  -- soon!
 
 parseOnly :: Parser a -&gt; ByteString -&gt; Either String a
 
 -- We will implement parseWord
-words :: D.ByteString -&gt; [D.ByteString]
+words :: ByteString -&gt; [ByteString]
 words string = case parseOnly parseWords string of
   Left _  -&gt; error &quot;Parser error&quot;
   Right c -&gt; c</code></pre>
@@ -181,7 +181,7 @@ takeWhile :: (Word8 -&gt; Bool) -&gt; Parser ByteString
 
 -- Start with parsing individual words
 -- Words are terminated with spaces or punctuation.
-parseWord :: Parser Data.ByteString
+parseWord :: Parser ByteString
 parseWord = do
   res &lt;- takeWhile1 (not . wordTerminator)
   return res</code></pre>
@@ -195,7 +195,7 @@ parseWord = do
 </section>
 <section id="using-parseword" class="level1">
 <h1>Using <code>parseWord</code></h1>
-<pre class="haskell"><code>parseWord :: Parser Data.ByteString
+<pre class="haskell"><code>parseWord :: Parser ByteString
 parseWord = do
   res &lt;- takeWhile1 (not . wordTerminator)
   return res
@@ -212,9 +212,9 @@ Left &quot;Failed reading: takeWhile1&quot;</code></pre>
 <p>We don’t want these separators in our words anyway, so let’s skip them.</p>
 <pre class="haskell"><code>skipWhile :: (Word8 -&gt; Bool) -&gt; Parser () 
 parseWord = do
-  P.skipWhile splitter -- (== toW &#39; &#39;)
+  skipWhile splitter -- (== toW &#39; &#39;)
   res &lt;- takeWhile1 (not . wordTerminator)
-  P.skipWhile splitter -- another edge case, dw about it
+  skipWhile splitter -- another edge case, dw about it
   return res
 
 &gt; parseOnly parseWord (toBS &quot;   Hello there!&quot;)
@@ -227,7 +227,7 @@ Right &quot;Hello&quot; -- 😂</code></pre>
 <pre class="haskell"><code>manyTill :: Alternative f =&gt; f a -&gt; f b -&gt; f [a] 
 satisfy :: (Word8 -&gt; Bool) -&gt; Parser Word8 
 
-parseWords :: Data.ByteString -&gt; [Data.ByteString]
+parseWords :: ByteString -&gt; [ByteString]
 parseWords = do
   skipWhile (\x -&gt; endline x || splitter x)
   manyTill parseWord (satisfy endline)</code></pre>
@@ -265,7 +265,7 @@ takeWhile1 (not . wordTerminator)
 <p>Punctuation is an important part of a sentence. We should consume it and return it if it’s there.</p>
 <pre class="haskell"><code>-- We need to call this if there&#39;s punctuation
 -- but takeWhile1 requires 1 punctuation
-P.takeWhile1 punct
+takeWhile1 punct
   -- \x -&gt; x == (toW &#39;.&#39;) || x == (toW &#39;!&#39;) || x == (toW &#39;?&#39;)</code></pre>
 </section>
 <section id="enter-choice" class="level1">

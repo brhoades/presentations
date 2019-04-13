@@ -62,7 +62,7 @@ pack :: [Word8] -> ByteString
 unpack :: ByteString -> [Word8]
 ```
 
-# [Data.Char] to Data.ByteString
+# [Char] to ByteString
 
 ```haskell
 -- Getting to/from Word8 is most easily done
@@ -95,10 +95,10 @@ toBS "Hello!" :: ByteString
  "The", "log", "was", "very", "long", "."]
 
 -- So:
-parseWords :: Data.ByteString -> [Data.ByteString]
+parseWords :: ByteString -> [ByteString]
 
 -- Which'll be easier if we find out how to parse a single word first
-parseWord :: Data.ByteString -> [Data.ByteString]
+parseWord :: ByteString -> [ByteString]
 ```
 
 # Attoparsec predicates
@@ -126,13 +126,13 @@ probablyConsonant = notInClass "aeiou"
 `Parser` wraps your parsing functions. It carries parsed input and unused input forward as you consume it.
 
 ```haskell
-parseWords :: P.Parser [D.ByteString]
+parseWords :: Parser [ByteString]
 parseWords = undefined  -- soon!
 
 parseOnly :: Parser a -> ByteString -> Either String a
 
 -- We will implement parseWord
-words :: D.ByteString -> [D.ByteString]
+words :: ByteString -> [ByteString]
 words string = case parseOnly parseWords string of
   Left _  -> error "Parser error"
   Right c -> c
@@ -149,7 +149,7 @@ takeWhile :: (Word8 -> Bool) -> Parser ByteString
 
 -- Start with parsing individual words
 -- Words are terminated with spaces or punctuation.
-parseWord :: Parser Data.ByteString
+parseWord :: Parser ByteString
 parseWord = do
   res <- takeWhile1 (not . wordTerminator)
   return res
@@ -161,7 +161,7 @@ parseWord = do
 
 # Using `parseWord`
 ```haskell
-parseWord :: Parser Data.ByteString
+parseWord :: Parser ByteString
 parseWord = do
   res <- takeWhile1 (not . wordTerminator)
   return res
@@ -184,9 +184,9 @@ We don't want these separators in our words anyway, so let's skip them.
 ```haskell
 skipWhile :: (Word8 -> Bool) -> Parser () 
 parseWord = do
-  P.skipWhile splitter -- (== toW ' ')
+  skipWhile splitter -- (== toW ' ')
   res <- takeWhile1 (not . wordTerminator)
-  P.skipWhile splitter -- another edge case, dw about it
+  skipWhile splitter -- another edge case, dw about it
   return res
 
 > parseOnly parseWord (toBS "   Hello there!")
@@ -202,7 +202,7 @@ We need to parse words over and over. We have the inner bit done but how do we c
 manyTill :: Alternative f => f a -> f b -> f [a] 
 satisfy :: (Word8 -> Bool) -> Parser Word8 
 
-parseWords :: Data.ByteString -> [Data.ByteString]
+parseWords :: ByteString -> [ByteString]
 parseWords = do
   skipWhile (\x -> endline x || splitter x)
   manyTill parseWord (satisfy endline)
@@ -249,7 +249,7 @@ Punctuation is an important part of a sentence. We should consume it and return 
 ```haskell
 -- We need to call this if there's punctuation
 -- but takeWhile1 requires 1 punctuation
-P.takeWhile1 punct
+takeWhile1 punct
   -- \x -> x == (toW '.') || x == (toW '!') || x == (toW '?')
 ```
 
