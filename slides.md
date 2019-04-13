@@ -309,7 +309,9 @@ PING irc.freenode.net
 Marko uses an event-based approach for parsing IRC
 
 ```haskell
-data Event = MessageEvent Source Message | ModeEvent User String | Ping Server
+data Event = MessageEvent Source Message
+               | ModeEvent User String
+               | Ping Server
 
 -- Parser gets events
 ircParser :: ReadP Event
@@ -319,7 +321,8 @@ Main bot loops does stuff with Events:
 
 ```haskell
 -- Ignore the man behind the curtain. See that Event?!
-handleEvent :: StdGen -> ChainData -> ChainData -> Event -> Maybe (String, String)
+handleEvent :: StdGen -> ChainData -> ChainData
+                 -> Event -> Maybe (String, String)
 ```
 
 # `ReadP`: Same great taste, ByteString-free

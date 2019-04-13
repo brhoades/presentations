@@ -326,13 +326,16 @@ Right [&quot;Hello&quot;,&quot;there&quot;,&quot;!&quot;,&quot;How&quot;,&quot;a
 <section id="events" class="level1">
 <h1>Events</h1>
 <p>Marko uses an event-based approach for parsing IRC</p>
-<pre class="haskell"><code>data Event = MessageEvent Source Message | ModeEvent User String | Ping Server
+<pre class="haskell"><code>data Event = MessageEvent Source Message
+               | ModeEvent User String
+               | Ping Server
 
 -- Parser gets events
 ircParser :: ReadP Event</code></pre>
 <p>Main bot loops does stuff with Events:</p>
 <pre class="haskell"><code>-- Ignore the man behind the curtain. See that Event?!
-handleEvent :: StdGen -&gt; ChainData -&gt; ChainData -&gt; Event -&gt; Maybe (String, String)</code></pre>
+handleEvent :: StdGen -&gt; ChainData -&gt; ChainData
+                 -&gt; Event -&gt; Maybe (String, String)</code></pre>
 </section>
 <section id="readp-same-great-taste-bytestring-free" class="level1">
 <h1><code>ReadP</code>: Same great taste, ByteString-free</h1>
