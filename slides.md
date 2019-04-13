@@ -14,12 +14,11 @@ date: April 13, 2019
 
 # Parser combinator modules
  * [base's `Text.ParserCombinators.ReadP`](https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html) (marko-hs IRC parser)
-   * Built-in with widely-available examples but slow.
+   * Built-in with widely-available examples but slow
  * [parser-combinators](https://github.com/mrkkrp/parser-combinators)
    * Lightweight parser combinators, only depends on base
  * [parsec](https://github.com/haskell/parsec) / [Megaparsec](https://github.com/mrkkrp/megaparsec)
-   * Industrial-strength, monad-fed, feature-rich parsers
-   * `Data.Text`-based with unicode goodness
+   * Industrial-strength, monad-fed, feature-rich library
  * [attoparsec](https://github.com/bos/attoparsec) (marko-hs sentence parser)
    * Parsec(ish) but with `ByteStrings`
    * Fast, memory-efficient, but no unicode
@@ -132,8 +131,8 @@ parseWords = undefined  -- soon!
 parseOnly :: Parser a -> ByteString -> Either String a
 
 -- We will implement parseWord
-words :: ByteString -> [ByteString]
-words string = case parseOnly parseWords string of
+parseWords :: ByteString -> [ByteString]
+parseWords str = case parseOnly parseWords str of
   Left _  -> error "Parser error"
   Right c -> c
 ```

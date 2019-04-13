@@ -57,7 +57,7 @@
 <ul>
 <li><a href="https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html">base’s <code>Text.ParserCombinators.ReadP</code></a> (marko-hs IRC parser)
 <ul>
-<li>Built-in with widely-available examples but slow.</li>
+<li>Built-in with widely-available examples but slow</li>
 </ul></li>
 <li><a href="https://github.com/mrkkrp/parser-combinators">parser-combinators</a>
 <ul>
@@ -65,8 +65,7 @@
 </ul></li>
 <li><a href="https://github.com/haskell/parsec">parsec</a> / <a href="https://github.com/mrkkrp/megaparsec">Megaparsec</a>
 <ul>
-<li>Industrial-strength, monad-fed, feature-rich parsers</li>
-<li><code>Data.Text</code>-based with unicode goodness</li>
+<li>Industrial-strength, monad-fed, feature-rich library</li>
 </ul></li>
 <li><a href="https://github.com/bos/attoparsec">attoparsec</a> (marko-hs sentence parser)
 <ul>
@@ -166,8 +165,8 @@ parseWords = undefined  -- soon!
 parseOnly :: Parser a -&gt; ByteString -&gt; Either String a
 
 -- We will implement parseWord
-words :: ByteString -&gt; [ByteString]
-words string = case parseOnly parseWords string of
+parseWords :: ByteString -&gt; [ByteString]
+parseWords str = case parseOnly parseWords str of
   Left _  -&gt; error &quot;Parser error&quot;
   Right c -&gt; c</code></pre>
 </section>
