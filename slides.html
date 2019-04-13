@@ -136,7 +136,7 @@ toBS &quot;Hello!&quot; :: ByteString
  &quot;The&quot;, &quot;log&quot;, &quot;was&quot;, &quot;very&quot;, &quot;long&quot;, &quot;.&quot;]
 
 -- So:
-parseWords :: ByteString -&gt; [ByteString]
+parseWords :: Parser [ByteString]
 
 -- Which&#39;ll be easier if we find out how to parse a single word first
 parseWord :: Parser ByteString</code></pre>
