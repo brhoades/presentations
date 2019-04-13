@@ -55,7 +55,7 @@
 <section id="parser-combinator-modules" class="level1">
 <h1>Parser combinator modules</h1>
 <ul>
-<li><a href="https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html">base</a> (marko-hs IRC parser)
+<li><a href="https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html">base’s <code>Text.ParserCombinators.ReadP</code></a> (marko-hs IRC parser)
 <ul>
 <li>Built-in with widely-available examples but slow.</li>
 </ul></li>
@@ -173,14 +173,12 @@ words string = case parseOnly parseWords string of
 </section>
 <section id="parsewords" class="level1">
 <h1><code>parseWords</code></h1>
-<p>We need to write a function which will consume some <code>ByteString</code> and return an array of words that were separated by separator.</p>
-<pre class="haskell"><code>-- Input: toBS &quot;abc 123 monad&quot;
+<p>Need a function to consume <code>ByteString</code> and return an array of words.</p>
+<pre class="haskell"><code>takeWhile :: (Word8 -&gt; Bool) -&gt; Parser ByteString 
+
+-- Input: toBS &quot;abc 123 monad&quot;
 -- Output: [&quot;abc&quot;, &quot;123&quot;, &quot;monad&quot;]
-
-takeWhile :: (Word8 -&gt; Bool) -&gt; Parser ByteString 
-
--- Start with parsing individual words
--- Words are terminated with spaces or punctuation.
+-- Start with parsing individual words termed by spaces/punc
 parseWord :: Parser ByteString
 parseWord = do
   res &lt;- takeWhile1 (not . wordTerminator)
@@ -307,23 +305,34 @@ Right [&quot;Hello&quot;,&quot;there&quot;,&quot;!&quot;,&quot;How&quot;,&quot;a
 </ul></li>
 <li>I hated attoparsec because:
 <ul>
-<li>Less feature rich / widely used than megaparsec or ReadP</li>
+<li>Less feature rich / widely used than megaparsec or <code>ReadP</code></li>
 <li>Using <code>ByteString</code>s activated my C PTSD</li>
 </ul></li>
 </ul>
 </section>
 <section id="how-about-that-irc" class="level1">
 <h1>How about that IRC?</h1>
-<p>Here’s the bare essentials of IRC our bot needs:</p>
+<p>Here’s the bare essentials of IRC that our bot needs:</p>
 <ul>
 <li>PING: allows us to stay connected. When you get a PING you PONG.</li>
 <li>MODE: this is an easy way to tell when we can join our channels.</li>
-<li>PRIVMSG: all messages from users come over PRIVMSG. This is how we’ll respond to people.</li>
+<li>PRIVMSG: all messages from users come over PRIVMSG.</li>
 </ul>
-<p>Examples of each (&gt; in, &lt; out):</p>
-<pre><code>&gt; PING irc.freenode.net
-&gt; :irc.freenode.net MODE &lt;umask&gt; +b
-&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<p>Examples of each:</p>
+<pre><code>PING irc.freenode.net
+:irc.freenode.net MODE &lt;umask&gt; +b
+:irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+</section>
+<section id="events" class="level1">
+<h1>Events</h1>
+<p>Marko uses an event-based approach for parsing IRC</p>
+<pre class="haskell"><code>data Event = MessageEvent Source Message | ModeEvent User String | Ping Server
+
+-- Parser gets events
+ircParser :: ReadP Event</code></pre>
+<p>Main bot loops does stuff with Events:</p>
+<pre class="haskell"><code>-- Ignore the man behind the curtain. See that Event?!
+handleEvent :: StdGen -&gt; ChainData -&gt; ChainData -&gt; Event -&gt; Maybe (String, String)</code></pre>
 </section>
 <section id="readp-same-great-taste-bytestring-free" class="level1">
 <h1><code>ReadP</code>: Same great taste, ByteString-free</h1>
@@ -343,9 +352,9 @@ Right [&quot;Hello&quot;,&quot;there&quot;,&quot;!&quot;,&quot;How&quot;,&quot;a
 </section>
 <section id="distinctions" class="level1">
 <h1>Distinctions</h1>
-<pre><code>&gt; PING irc.freenode.net
-&gt; :irc.freenode.net MODE &lt;umask&gt; +b
-&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<pre><code>PING irc.freenode.net
+:irc.freenode.net MODE &lt;umask&gt; +b
+:irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
 <p>There’s clearly two formats here: PING and not PING. This looks like <code>choice</code>.</p>
 <pre class="haskell"><code>ircParser :: ReadP Event -- ReadP = Parser
 ircParser = choice [otherMessages, ping]</code></pre>
@@ -354,7 +363,7 @@ ircParser = choice [otherMessages, ping]</code></pre>
 <section id="ping" class="level1">
 <h1>PING</h1>
 <p>Ping is easy too.</p>
-<pre><code>&gt; PING irc.freenode.net</code></pre>
+<pre><code>PING irc.freenode.net</code></pre>
 <p>Let’s start by defining some predicates:</p>
 <pre class="haskell"><code>eol   :: Char -&gt; Bool
 eol   =  \x -&gt; (x == &#39;\n&#39; || x == &#39;\r&#39;)
@@ -383,7 +392,7 @@ ping = do
   -- 2) Grab everything else (server name)
   -- munch (not . eolws)
   server &lt;- consumeEOLWS 
-  -- Marko returns a Ping Event.
+  -- A Ping Event for our event-based bot
   Just $ Ping server </code></pre>
 </section>
 <section id="parsing-everything-else" class="level1">
@@ -404,8 +413,8 @@ otherMessages = do
 </section>
 <section id="getevent" class="level1">
 <h1>getEvent</h1>
-<pre><code>&gt; :irc.freenode.net MODE &lt;umask&gt; +b
-&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<pre><code>:irc.freenode.net MODE &lt;umask&gt; +b
+:irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
 <pre class="haskell"><code>getEvent :: String -&gt; eventType -&gt; ReadP (Maybe Event)
 getEvent server x
     | x == &quot;PRIVMSG&quot; = handleMSG server
@@ -423,7 +432,7 @@ getEvent server x
 </section>
 <section id="finally-handlemsg" class="level1">
 <h1>Finally: <code>handleMSG</code></h1>
-<pre><code>&gt; :irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
+<pre><code>:irc.freenode.net PRIVMSG &lt;umask&gt; #monads :guys...</code></pre>
 <pre class="haskell"><code>handleMSG :: String -&gt; ReadP (Maybe Event)
 handleMSG user = do
   -- handles parsing umasks; boring

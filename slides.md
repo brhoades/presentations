@@ -13,7 +13,7 @@ date: April 13, 2019
 
 
 # Parser combinator modules
- * [base](https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html) (marko-hs IRC parser)
+ * [base's `Text.ParserCombinators.ReadP`](https://hackage.haskell.org/package/base-4.12.0.0/docs/Text-ParserCombinators-ReadP.html) (marko-hs IRC parser)
    * Built-in with widely-available examples but slow.
  * [parser-combinators](https://github.com/mrkkrp/parser-combinators)
    * Lightweight parser combinators, only depends on base
@@ -139,16 +139,14 @@ words string = case parseOnly parseWords string of
 ```
 
 # `parseWords`
-We need to write a function which will consume some `ByteString` and return an array of words that were separated by separator.
+Need a function to consume `ByteString` and return an array of words.
 
 ```haskell
--- Input: toBS "abc 123 monad"
--- Output: ["abc", "123", "monad"]
-
 takeWhile :: (Word8 -> Bool) -> Parser ByteString 
 
--- Start with parsing individual words
--- Words are terminated with spaces or punctuation.
+-- Input: toBS "abc 123 monad"
+-- Output: ["abc", "123", "monad"]
+-- Start with parsing individual words termed by spaces/punc
 parseWord :: Parser ByteString
 parseWord = do
   res <- takeWhile1 (not . wordTerminator)
@@ -289,22 +287,39 @@ Perfect, it's all separated now. This is (mostly) how marko-hs uses attoparsec t
    * Storing 500k chains is done <512 MiB memory
      * 6 million 2-pairs of chains, stored uncompressed, takes mere GBs
  * I hated attoparsec because:
-   * Less feature rich / widely used than megaparsec or ReadP
+   * Less feature rich / widely used than megaparsec or `ReadP`
    * Using `ByteString`s activated my C PTSD
 
 # How about that IRC?
-Here's the bare essentials of IRC our bot needs:
+Here's the bare essentials of IRC that our bot needs:
 
  * PING: allows us to stay connected. When you get a PING you PONG.
  * MODE: this is an easy way to tell when we can join our channels.
- * PRIVMSG: all messages from users come over PRIVMSG. This is how we'll respond to people.
+ * PRIVMSG: all messages from users come over PRIVMSG.
 
-Examples of each (> in, < out):
+Examples of each:
 
 ```
-> PING irc.freenode.net
-> :irc.freenode.net MODE <umask> +b
-> :irc.freenode.net PRIVMSG <umask> #monads :guys...
+PING irc.freenode.net
+:irc.freenode.net MODE <umask> +b
+:irc.freenode.net PRIVMSG <umask> #monads :guys...
+```
+
+# Events
+Marko uses an event-based approach for parsing IRC
+
+```haskell
+data Event = MessageEvent Source Message | ModeEvent User String | Ping Server
+
+-- Parser gets events
+ircParser :: ReadP Event
+```
+
+Main bot loops does stuff with Events:
+
+```haskell
+-- Ignore the man behind the curtain. See that Event?!
+handleEvent :: StdGen -> ChainData -> ChainData -> Event -> Maybe (String, String)
 ```
 
 # `ReadP`: Same great taste, ByteString-free
@@ -324,9 +339,9 @@ Major differences
 
 # Distinctions
 ```
-> PING irc.freenode.net
-> :irc.freenode.net MODE <umask> +b
-> :irc.freenode.net PRIVMSG <umask> #monads :guys...
+PING irc.freenode.net
+:irc.freenode.net MODE <umask> +b
+:irc.freenode.net PRIVMSG <umask> #monads :guys...
 ```
 
 There's clearly two formats here: PING and not PING. This looks like `choice`.
@@ -341,7 +356,7 @@ Bam, that was easy.
 # PING
 Ping is easy too.
 ```
-> PING irc.freenode.net
+PING irc.freenode.net
 ```
 
 Let's start by defining some predicates:
@@ -377,7 +392,7 @@ ping = do
   -- 2) Grab everything else (server name)
   -- munch (not . eolws)
   server <- consumeEOLWS 
-  -- Marko returns a Ping Event.
+  -- A Ping Event for our event-based bot
   Just $ Ping server 
 ```
 
@@ -404,8 +419,8 @@ otherMessages = do
 
 # getEvent
 ```
-> :irc.freenode.net MODE <umask> +b
-> :irc.freenode.net PRIVMSG <umask> #monads :guys...
+:irc.freenode.net MODE <umask> +b
+:irc.freenode.net PRIVMSG <umask> #monads :guys...
 ```
 
 ```haskell
@@ -427,7 +442,7 @@ getEvent server x
 
 # Finally: `handleMSG`
 ```
-> :irc.freenode.net PRIVMSG <umask> #monads :guys...
+:irc.freenode.net PRIVMSG <umask> #monads :guys...
 ```
 
 ```haskell
