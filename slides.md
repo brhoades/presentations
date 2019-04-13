@@ -209,7 +209,7 @@ parseWords = do
 ```
 
 * We continue to skip any endlines or splitters that may come in between words.
-* manyTill calls one parser until the other consumes input
+* `manyTill` calls one parser until the other consumes input
 
 # Does it work?
 Yes!
