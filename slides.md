@@ -94,7 +94,7 @@ toBS "Hello!" :: ByteString
  "The", "log", "was", "very", "long", "."]
 
 -- So:
-parseWords :: ByteString -> [ByteString]
+parseWords :: Parser [ByteString]
 
 -- Which'll be easier if we find out how to parse a single word first
 parseWord :: Parser ByteString
