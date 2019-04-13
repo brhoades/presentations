@@ -233,7 +233,7 @@ parseWords = do
   manyTill parseWord (satisfy endline)</code></pre>
 <ul>
 <li>We continue to skip any endlines or splitters that may come in between words.</li>
-<li>manyTill calls one parser until the other consumes input</li>
+<li><code>manyTill</code> calls one parser until the other consumes input</li>
 </ul>
 </section>
 <section id="does-it-work" class="level1">
